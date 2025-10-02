@@ -1242,7 +1242,7 @@ Yorha.load = function()
 	if vim.g.colors_name then
 		vim.cmd.hi("clear")
 	end
-	vim.g.colors_name = "gruvbox"
+	vim.g.colors_name = "yorha"
 	vim.o.termguicolors = true
 
 	local groups = get_groups()
