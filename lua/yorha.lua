@@ -1,0 +1,1472 @@
+---@class Yorha
+---@field config YorhaConfig
+---@field palette YorhaPalette
+local Yorha = {}
+
+---@alias Contrast "hard" | "soft" | ""
+
+---@class ItalicConfig
+---@field strings boolean
+---@field comments boolean
+---@field operators boolean
+---@field folds boolean
+---@field emphasis boolean
+
+---@class HighlightDefinition
+---@field fg string?
+---@field bg string?
+---@field sp string?
+---@field blend integer?
+---@field bold boolean?
+---@field standout boolean?
+---@field underline boolean?
+---@field undercurl boolean?
+---@field underdouble boolean?
+---@field underdotted boolean?
+---@field strikethrough boolean?
+---@field italic boolean?
+---@field reverse boolean?
+---@field nocombine boolean?
+
+---@class YorhaConfig
+---@field bold boolean?
+---@field contrast Contrast?
+---@field dim_inactive boolean?
+---@field inverse boolean?
+---@field invert_selection boolean?
+---@field invert_signs boolean?
+---@field invert_tabline boolean?
+---@field italic ItalicConfig?
+---@field overrides table<string, HighlightDefinition>?
+---@field palette_overrides table<string, string>?
+---@field strikethrough boolean?
+---@field terminal_colors boolean?
+---@field transparent_mode boolean?
+---@field undercurl boolean?
+---@field underline boolean?
+local default_config = {
+	terminal_colors = true,
+	undercurl = true,
+	bold = true,
+	italic = {
+		strings = true,
+		emphasis = true,
+		comments = true,
+		operators = false,
+		folds = true,
+	},
+	strikethrough = true,
+	invert_selection = false,
+	invert_signs = false,
+	invert_tabline = false,
+	inverse = true,
+	contrast = "",
+	palette_overrides = {},
+	overrides = {},
+	dim_inactive = false,
+	transparent_mode = false,
+}
+
+Yorha.config = vim.deepcopy(default_config)
+Yorha.palette = {
+	light0 = "#C8C2AA",
+	light1 = "#B6B19B",
+	light2 = "#A59F8B",
+	light3 = "#938E7C",
+	dark0 = "#827D6C",
+	dark1 = "#706C5D",
+	dark2 = "#5F5A4D",
+	dark3 = "#4D493E",
+	red = "#CC664D",
+	yellow = "#62473B",
+	green = "#727B5B",
+	aqua = "#8BBBAA",
+}
+
+local function get_colors()
+	local p = Yorha.palette
+	local config = Yorha.config
+
+	for color, hex in pairs(config.palette_overrides) do
+		p[color] = hex
+	end
+
+	local color_groups = {
+		bg0 = p.light0,
+		bg1 = p.light1,
+		bg2 = p.light2,
+		bg3 = p.light3,
+		bg4 = p.light3,
+		gray = p.light3,
+		fg0 = p.dark0,
+		fg1 = p.dark1,
+		fg2 = p.dark2,
+		fg3 = p.dark3,
+		fg4 = p.dark3,
+		red = p.red,
+		yellow = p.yellow,
+		orange = p.yellow,
+		green = p.green,
+		purple = p.green,
+		aqua = p.aqua,
+		blue = p.aqua,
+		neutral_yellow = p.yellow,
+		neutral_green = p.green,
+		neutral_purple = p.green,
+		neutral_aqua = p.aqua,
+		neutral_blue = p.aqua,
+		dark_red = p.red,
+		dark_green = p.green,
+		dark_aqua = p.aqua,
+	}
+
+	return color_groups
+end
+
+local function get_groups()
+	local colors = get_colors()
+	local config = Yorha.config
+
+	if config.terminal_colors then
+		local term_colors = {
+			colors.bg0,
+			colors.neutral_red,
+			colors.neutral_green,
+			colors.neutral_yellow,
+			colors.neutral_blue,
+			colors.neutral_purple,
+			colors.neutral_aqua,
+			colors.fg4,
+			colors.gray,
+			colors.red,
+			colors.green,
+			colors.yellow,
+			colors.blue,
+			colors.purple,
+			colors.aqua,
+			colors.fg1,
+		}
+		for index, value in ipairs(term_colors) do
+			vim.g["terminal_color_" .. index - 1] = value
+		end
+	end
+
+	local groups = {
+		YorhaFg0 = { fg = colors.fg0 },
+		YorhaFg1 = { fg = colors.fg1 },
+		YorhaFg2 = { fg = colors.fg2 },
+		YorhaFg3 = { fg = colors.fg3 },
+		YorhaFg4 = { fg = colors.fg4 },
+		YorhaGray = { fg = colors.gray },
+		YorhaBg0 = { fg = colors.bg0 },
+		YorhaBg1 = { fg = colors.bg1 },
+		YorhaBg2 = { fg = colors.bg2 },
+		YorhaBg3 = { fg = colors.bg3 },
+		YorhaBg4 = { fg = colors.bg4 },
+		YorhaRed = { fg = colors.red },
+		YorhaRedBold = { fg = colors.red, bold = config.bold },
+		YorhaGreen = { fg = colors.green },
+		YorhaGreenBold = { fg = colors.green, bold = config.bold },
+		YorhaYellow = { fg = colors.yellow },
+		YorhaYellowBold = { fg = colors.yellow, bold = config.bold },
+		YorhaBlue = { fg = colors.blue },
+		YorhaBlueBold = { fg = colors.blue, bold = config.bold },
+		YorhaPurple = { fg = colors.purple },
+		YorhaPurpleBold = { fg = colors.purple, bold = config.bold },
+		YorhaAqua = { fg = colors.aqua },
+		YorhaAquaBold = { fg = colors.aqua, bold = config.bold },
+		YorhaOrange = { fg = colors.orange },
+		YorhaOrangeBold = { fg = colors.orange, bold = config.bold },
+		YorhaRedSign = config.transparent_mode and { fg = colors.red, reverse = config.invert_signs }
+			or { fg = colors.red, bg = colors.bg1, reverse = config.invert_signs },
+		YorhaGreenSign = config.transparent_mode and { fg = colors.green, reverse = config.invert_signs }
+			or { fg = colors.green, bg = colors.bg1, reverse = config.invert_signs },
+		YorhaYellowSign = config.transparent_mode and { fg = colors.yellow, reverse = config.invert_signs }
+			or { fg = colors.yellow, bg = colors.bg1, reverse = config.invert_signs },
+		YorhaBlueSign = config.transparent_mode and { fg = colors.blue, reverse = config.invert_signs }
+			or { fg = colors.blue, bg = colors.bg1, reverse = config.invert_signs },
+		YorhaPurpleSign = config.transparent_mode and { fg = colors.purple, reverse = config.invert_signs }
+			or { fg = colors.purple, bg = colors.bg1, reverse = config.invert_signs },
+		YorhaAquaSign = config.transparent_mode and { fg = colors.aqua, reverse = config.invert_signs }
+			or { fg = colors.aqua, bg = colors.bg1, reverse = config.invert_signs },
+		YorhaOrangeSign = config.transparent_mode and { fg = colors.orange, reverse = config.invert_signs }
+			or { fg = colors.orange, bg = colors.bg1, reverse = config.invert_signs },
+		YorhaRedUnderline = { undercurl = config.undercurl, sp = colors.red },
+		YorhaGreenUnderline = { undercurl = config.undercurl, sp = colors.green },
+		YorhaYellowUnderline = { undercurl = config.undercurl, sp = colors.yellow },
+		YorhaBlueUnderline = { undercurl = config.undercurl, sp = colors.blue },
+		YorhaPurpleUnderline = { undercurl = config.undercurl, sp = colors.purple },
+		YorhaAquaUnderline = { undercurl = config.undercurl, sp = colors.aqua },
+		YorhaOrangeUnderline = { undercurl = config.undercurl, sp = colors.orange },
+		Normal = config.transparent_mode and { fg = colors.fg1, bg = nil } or { fg = colors.fg1, bg = colors.bg0 },
+		NormalFloat = config.transparent_mode and { fg = colors.fg1, bg = nil } or { fg = colors.fg1, bg = colors.bg1 },
+		NormalNC = config.dim_inactive and { fg = colors.fg0, bg = colors.bg1 } or { link = "Normal" },
+		CursorLine = { bg = colors.bg1 },
+		CursorColumn = { link = "CursorLine" },
+		TabLineFill = { fg = colors.bg4, bg = colors.bg1, reverse = config.invert_tabline },
+		TabLineSel = { fg = colors.green, bg = colors.bg1, reverse = config.invert_tabline },
+		TabLine = { link = "TabLineFill" },
+		MatchParen = { bg = colors.bg3, bold = config.bold },
+		ColorColumn = { bg = colors.bg1 },
+		Conceal = { fg = colors.blue },
+		CursorLineNr = { fg = colors.yellow, bg = colors.bg1 },
+		NonText = { link = "YorhaBg2" },
+		SpecialKey = { link = "YorhaFg4" },
+		Visual = { bg = colors.bg3, reverse = config.invert_selection },
+		VisualNOS = { link = "Visual" },
+		Search = { fg = colors.yellow, bg = colors.bg0, reverse = config.inverse },
+		IncSearch = { fg = colors.orange, bg = colors.bg0, reverse = config.inverse },
+		CurSearch = { link = "IncSearch" },
+		QuickFixLine = { link = "YorhaPurple" },
+		Underlined = { fg = colors.blue, underline = config.underline },
+		StatusLine = { fg = colors.fg1, bg = colors.bg2 },
+		StatusLineNC = { fg = colors.fg4, bg = colors.bg1 },
+		WinBar = { fg = colors.fg4, bg = colors.bg0 },
+		WinBarNC = { fg = colors.fg3, bg = colors.bg1 },
+		WinSeparator = config.transparent_mode and { fg = colors.bg3, bg = nil }
+			or { fg = colors.bg3, bg = colors.bg0 },
+		WildMenu = { fg = colors.blue, bg = colors.bg2, bold = config.bold },
+		Directory = { link = "YorhaGreenBold" },
+		Title = { link = "YorhaGreenBold" },
+		ErrorMsg = { fg = colors.bg0, bg = colors.red, bold = config.bold },
+		MoreMsg = { link = "YorhaYellowBold" },
+		ModeMsg = { link = "YorhaYellowBold" },
+		Question = { link = "YorhaOrangeBold" },
+		WarningMsg = { link = "YorhaRedBold" },
+		LineNr = { fg = colors.bg4 },
+		SignColumn = config.transparent_mode and { bg = nil } or { bg = colors.bg1 },
+		Folded = { fg = colors.gray, bg = colors.bg1, italic = config.italic.folds },
+		FoldColumn = config.transparent_mode and { fg = colors.gray, bg = nil }
+			or { fg = colors.gray, bg = colors.bg1 },
+		Cursor = { reverse = config.inverse },
+		vCursor = { link = "Cursor" },
+		iCursor = { link = "Cursor" },
+		lCursor = { link = "Cursor" },
+		Special = { link = "YorhaOrange" },
+		Comment = { fg = colors.gray, italic = config.italic.comments },
+		Todo = { fg = colors.bg0, bg = colors.yellow, bold = config.bold, italic = config.italic.comments },
+		Done = { fg = colors.orange, bold = config.bold, italic = config.italic.comments },
+		Error = { fg = colors.red, bold = config.bold, reverse = config.inverse },
+		Statement = { link = "YorhaRed" },
+		Conditional = { link = "YorhaRed" },
+		Repeat = { link = "YorhaRed" },
+		Label = { link = "YorhaRed" },
+		Exception = { link = "YorhaRed" },
+		Operator = { fg = colors.orange, italic = config.italic.operators },
+		Keyword = { link = "YorhaRed" },
+		Identifier = { link = "YorhaBlue" },
+		Function = { link = "YorhaGreenBold" },
+		PreProc = { link = "YorhaAqua" },
+		Include = { link = "YorhaAqua" },
+		Define = { link = "YorhaAqua" },
+		Macro = { link = "YorhaAqua" },
+		PreCondit = { link = "YorhaAqua" },
+		Constant = { link = "YorhaPurple" },
+		Character = { link = "YorhaPurple" },
+		String = { fg = colors.green, italic = config.italic.strings },
+		Boolean = { link = "YorhaPurple" },
+		Number = { link = "YorhaPurple" },
+		Float = { link = "YorhaPurple" },
+		Type = { link = "YorhaYellow" },
+		StorageClass = { link = "YorhaOrange" },
+		Structure = { link = "YorhaAqua" },
+		Typedef = { link = "YorhaYellow" },
+		Pmenu = { fg = colors.fg1, bg = colors.bg2 },
+		PmenuSel = { fg = colors.bg2, bg = colors.blue, bold = config.bold },
+		PmenuSbar = { bg = colors.bg2 },
+		PmenuThumb = { bg = colors.bg4 },
+		DiffDelete = { bg = colors.dark_red },
+		DiffAdd = { bg = colors.dark_green },
+		DiffChange = { bg = colors.dark_aqua },
+		DiffText = { bg = colors.yellow, fg = colors.bg0 },
+		SpellCap = { link = "YorhaBlueUnderline" },
+		SpellBad = { link = "YorhaRedUnderline" },
+		SpellLocal = { link = "YorhaAquaUnderline" },
+		SpellRare = { link = "YorhaPurpleUnderline" },
+		Whitespace = { fg = colors.bg2 },
+		Delimiter = { link = "YorhaOrange" },
+		EndOfBuffer = { link = "NonText" },
+		DiagnosticError = { link = "YorhaRed" },
+		DiagnosticWarn = { link = "YorhaYellow" },
+		DiagnosticInfo = { link = "YorhaBlue" },
+		DiagnosticDeprecated = { strikethrough = config.strikethrough },
+		DiagnosticHint = { link = "YorhaAqua" },
+		DiagnosticOk = { link = "YorhaGreen" },
+		DiagnosticSignError = { link = "YorhaRedSign" },
+		DiagnosticSignWarn = { link = "YorhaYellowSign" },
+		DiagnosticSignInfo = { link = "YorhaBlueSign" },
+		DiagnosticSignHint = { link = "YorhaAquaSign" },
+		DiagnosticSignOk = { link = "YorhaGreenSign" },
+		DiagnosticUnderlineError = { link = "YorhaRedUnderline" },
+		DiagnosticUnderlineWarn = { link = "YorhaYellowUnderline" },
+		DiagnosticUnderlineInfo = { link = "YorhaBlueUnderline" },
+		DiagnosticUnderlineHint = { link = "YorhaAquaUnderline" },
+		DiagnosticUnderlineOk = { link = "YorhaGreenUnderline" },
+		DiagnosticFloatingError = { link = "YorhaRed" },
+		DiagnosticFloatingWarn = { link = "YorhaOrange" },
+		DiagnosticFloatingInfo = { link = "YorhaBlue" },
+		DiagnosticFloatingHint = { link = "YorhaAqua" },
+		DiagnosticFloatingOk = { link = "YorhaGreen" },
+		DiagnosticVirtualTextError = { link = "YorhaRed" },
+		DiagnosticVirtualTextWarn = { link = "YorhaYellow" },
+		DiagnosticVirtualTextInfo = { link = "YorhaBlue" },
+		DiagnosticVirtualTextHint = { link = "YorhaAqua" },
+		DiagnosticVirtualTextOk = { link = "YorhaGreen" },
+		LspReferenceRead = { link = "YorhaYellowBold" },
+		LspReferenceTarget = { link = "Visual" },
+		LspReferenceText = { link = "YorhaYellowBold" },
+		LspReferenceWrite = { link = "YorhaOrangeBold" },
+		LspCodeLens = { link = "YorhaGray" },
+		LspSignatureActiveParameter = { link = "Search" },
+		gitcommitSelectedFile = { link = "YorhaGreen" },
+		gitcommitDiscardedFile = { link = "YorhaRed" },
+		GitSignsAdd = { link = "YorhaGreen" },
+		GitSignsChange = { link = "YorhaOrange" },
+		GitSignsDelete = { link = "YorhaRed" },
+		NvimTreeSymlink = { fg = colors.neutral_aqua },
+		NvimTreeRootFolder = { fg = colors.neutral_purple, bold = true },
+		NvimTreeFolderIcon = { fg = colors.neutral_blue, bold = true },
+		NvimTreeFileIcon = { fg = colors.light2 },
+		NvimTreeExecFile = { fg = colors.neutral_green, bold = true },
+		NvimTreeOpenedFile = { fg = colors.bright_red, bold = true },
+		NvimTreeSpecialFile = { fg = colors.neutral_yellow, bold = true, underline = true },
+		NvimTreeImageFile = { fg = colors.neutral_purple },
+		NvimTreeIndentMarker = { fg = colors.dark3 },
+		NvimTreeGitDirty = { fg = colors.neutral_yellow },
+		NvimTreeGitStaged = { fg = colors.neutral_yellow },
+		NvimTreeGitMerge = { fg = colors.neutral_purple },
+		NvimTreeGitRenamed = { fg = colors.neutral_purple },
+		NvimTreeGitNew = { fg = colors.neutral_yellow },
+		NvimTreeGitDeleted = { fg = colors.neutral_red },
+		NvimTreeWindowPicker = { bg = colors.aqua },
+		debugPC = { link = "DiffAdd" },
+		debugBreakpoint = { link = "YorhaRedSign" },
+		StartifyBracket = { link = "YorhaFg3" },
+		StartifyFile = { link = "YorhaFg1" },
+		StartifyNumber = { link = "YorhaBlue" },
+		StartifyPath = { link = "YorhaGray" },
+		StartifySlash = { link = "YorhaGray" },
+		StartifySection = { link = "YorhaYellow" },
+		StartifySpecial = { link = "YorhaBg2" },
+		StartifyHeader = { link = "YorhaOrange" },
+		StartifyFooter = { link = "YorhaBg2" },
+		StartifyVar = { link = "StartifyPath" },
+		StartifySelect = { link = "Title" },
+		DirvishPathTail = { link = "YorhaAqua" },
+		DirvishArg = { link = "YorhaYellow" },
+		netrwDir = { link = "YorhaAqua" },
+		netrwClassify = { link = "YorhaAqua" },
+		netrwLink = { link = "YorhaGray" },
+		netrwSymLink = { link = "YorhaFg1" },
+		netrwExe = { link = "YorhaYellow" },
+		netrwComment = { link = "YorhaGray" },
+		netrwList = { link = "YorhaBlue" },
+		netrwHelpCmd = { link = "YorhaAqua" },
+		netrwCmdSep = { link = "YorhaFg3" },
+		netrwVersion = { link = "YorhaGreen" },
+		NERDTreeDir = { link = "YorhaAqua" },
+		NERDTreeDirSlash = { link = "YorhaAqua" },
+		NERDTreeOpenable = { link = "YorhaOrange" },
+		NERDTreeClosable = { link = "YorhaOrange" },
+		NERDTreeFile = { link = "YorhaFg1" },
+		NERDTreeExecFile = { link = "YorhaYellow" },
+		NERDTreeUp = { link = "YorhaGray" },
+		NERDTreeCWD = { link = "YorhaGreen" },
+		NERDTreeHelp = { link = "YorhaFg1" },
+		NERDTreeToggleOn = { link = "YorhaGreen" },
+		NERDTreeToggleOff = { link = "YorhaRed" },
+		CocErrorSign = { link = "YorhaRedSign" },
+		CocWarningSign = { link = "YorhaOrangeSign" },
+		CocInfoSign = { link = "YorhaBlueSign" },
+		CocHintSign = { link = "YorhaAquaSign" },
+		CocErrorFloat = { link = "YorhaRed" },
+		CocWarningFloat = { link = "YorhaOrange" },
+		CocInfoFloat = { link = "YorhaBlue" },
+		CocHintFloat = { link = "YorhaAqua" },
+		CocDiagnosticsError = { link = "YorhaRed" },
+		CocDiagnosticsWarning = { link = "YorhaOrange" },
+		CocDiagnosticsInfo = { link = "YorhaBlue" },
+		CocDiagnosticsHint = { link = "YorhaAqua" },
+		CocSearch = { link = "YorhaBlue" },
+		CocSelectedText = { link = "YorhaRed" },
+		CocMenuSel = { link = "PmenuSel" },
+		CocCodeLens = { link = "YorhaGray" },
+		CocErrorHighlight = { link = "YorhaRedUnderline" },
+		CocWarningHighlight = { link = "YorhaOrangeUnderline" },
+		CocInfoHighlight = { link = "YorhaBlueUnderline" },
+		CocHintHighlight = { link = "YorhaAquaUnderline" },
+		SnacksPicker = { link = "YorhaFg1" },
+		SnacksPickerBorder = { link = "SnacksPicker" },
+		SnacksPickerListCursorLine = { link = "CursorLine" },
+		SnacksPickerMatch = { link = "YorhaOrange" },
+		SnacksPickerPrompt = { link = "YorhaRed" },
+		SnacksPickerTitle = { link = "SnacksPicker" },
+		SnacksPickerDir = { link = "YorhaGray" },
+		SnacksPickerPathHidden = { link = "YorhaGray" },
+		SnacksPickerGitStatusUntracked = { link = "YorhaGray" },
+		SnacksPickerPathIgnored = { link = "YorhaBg3" },
+		TelescopeNormal = { link = "YorhaFg1" },
+		TelescopeSelection = { link = "CursorLine" },
+		TelescopeSelectionCaret = { link = "YorhaRed" },
+		TelescopeMultiSelection = { link = "YorhaGray" },
+		TelescopeBorder = { link = "TelescopeNormal" },
+		TelescopePromptBorder = { link = "TelescopeNormal" },
+		TelescopeResultsBorder = { link = "TelescopeNormal" },
+		TelescopePreviewBorder = { link = "TelescopeNormal" },
+		TelescopeMatching = { link = "YorhaOrange" },
+		TelescopePromptPrefix = { link = "YorhaRed" },
+		TelescopePrompt = { link = "TelescopeNormal" },
+		CmpItemAbbr = { link = "YorhaFg0" },
+		CmpItemAbbrDeprecated = { link = "YorhaFg1" },
+		CmpItemAbbrMatch = { link = "YorhaBlueBold" },
+		CmpItemAbbrMatchFuzzy = { link = "YorhaBlueUnderline" },
+		CmpItemMenu = { link = "YorhaGray" },
+		CmpItemKindText = { link = "YorhaOrange" },
+		CmpItemKindVariable = { link = "YorhaOrange" },
+		CmpItemKindMethod = { link = "YorhaBlue" },
+		CmpItemKindFunction = { link = "YorhaBlue" },
+		CmpItemKindConstructor = { link = "YorhaYellow" },
+		CmpItemKindUnit = { link = "YorhaBlue" },
+		CmpItemKindField = { link = "YorhaBlue" },
+		CmpItemKindClass = { link = "YorhaYellow" },
+		CmpItemKindInterface = { link = "YorhaYellow" },
+		CmpItemKindModule = { link = "YorhaBlue" },
+		CmpItemKindProperty = { link = "YorhaBlue" },
+		CmpItemKindValue = { link = "YorhaOrange" },
+		CmpItemKindEnum = { link = "YorhaYellow" },
+		CmpItemKindOperator = { link = "YorhaYellow" },
+		CmpItemKindKeyword = { link = "YorhaPurple" },
+		CmpItemKindEvent = { link = "YorhaPurple" },
+		CmpItemKindReference = { link = "YorhaPurple" },
+		CmpItemKindColor = { link = "YorhaPurple" },
+		CmpItemKindSnippet = { link = "YorhaGreen" },
+		CmpItemKindFile = { link = "YorhaBlue" },
+		CmpItemKindFolder = { link = "YorhaBlue" },
+		CmpItemKindEnumMember = { link = "YorhaAqua" },
+		CmpItemKindConstant = { link = "YorhaOrange" },
+		CmpItemKindStruct = { link = "YorhaYellow" },
+		CmpItemKindTypeParameter = { link = "YorhaYellow" },
+		BlinkCmpLabel = { link = "YorhaFg0" },
+		BlinkCmpLabelDeprecated = { link = "YorhaFg1" },
+		BlinkCmpLabelMatch = { link = "YorhaBlueBold" },
+		BlinkCmpLabelDetail = { link = "YorhaGray" },
+		BlinkCmpLabelDescription = { link = "YorhaGray" },
+		BlinkCmpKindText = { link = "YorhaOrange" },
+		BlinkCmpKindVariable = { link = "YorhaOrange" },
+		BlinkCmpKindMethod = { link = "YorhaBlue" },
+		BlinkCmpKindFunction = { link = "YorhaBlue" },
+		BlinkCmpKindConstructor = { link = "YorhaYellow" },
+		BlinkCmpKindUnit = { link = "YorhaBlue" },
+		BlinkCmpKindField = { link = "YorhaBlue" },
+		BlinkCmpKindClass = { link = "YorhaYellow" },
+		BlinkCmpKindInterface = { link = "YorhaYellow" },
+		BlinkCmpKindModule = { link = "YorhaBlue" },
+		BlinkCmpKindProperty = { link = "YorhaBlue" },
+		BlinkCmpKindValue = { link = "YorhaOrange" },
+		BlinkCmpKindEnum = { link = "YorhaYellow" },
+		BlinkCmpKindOperator = { link = "YorhaYellow" },
+		BlinkCmpKindKeyword = { link = "YorhaPurple" },
+		BlinkCmpKindEvent = { link = "YorhaPurple" },
+		BlinkCmpKindReference = { link = "YorhaPurple" },
+		BlinkCmpKindColor = { link = "YorhaPurple" },
+		BlinkCmpKindSnippet = { link = "YorhaGreen" },
+		BlinkCmpKindFile = { link = "YorhaBlue" },
+		BlinkCmpKindFolder = { link = "YorhaBlue" },
+		BlinkCmpKindEnumMember = { link = "YorhaAqua" },
+		BlinkCmpKindConstant = { link = "YorhaOrange" },
+		BlinkCmpKindStruct = { link = "YorhaYellow" },
+		BlinkCmpKindTypeParameter = { link = "YorhaYellow" },
+		BlinkCmpSource = { link = "YorhaGray" },
+		BlinkCmpGhostText = { link = "YorhaBg4" },
+		diffAdded = { link = "DiffAdd" },
+		diffRemoved = { link = "DiffDelete" },
+		diffChanged = { link = "DiffChange" },
+		diffFile = { link = "YorhaOrange" },
+		diffNewFile = { link = "YorhaYellow" },
+		diffOldFile = { link = "YorhaOrange" },
+		diffLine = { link = "YorhaBlue" },
+		diffIndexLine = { link = "diffChanged" },
+		NavicIconsFile = { link = "YorhaBlue" },
+		NavicIconsModule = { link = "YorhaOrange" },
+		NavicIconsNamespace = { link = "YorhaBlue" },
+		NavicIconsPackage = { link = "YorhaAqua" },
+		NavicIconsClass = { link = "YorhaYellow" },
+		NavicIconsMethod = { link = "YorhaBlue" },
+		NavicIconsProperty = { link = "YorhaAqua" },
+		NavicIconsField = { link = "YorhaPurple" },
+		NavicIconsConstructor = { link = "YorhaBlue" },
+		NavicIconsEnum = { link = "YorhaPurple" },
+		NavicIconsInterface = { link = "YorhaGreen" },
+		NavicIconsFunction = { link = "YorhaBlue" },
+		NavicIconsVariable = { link = "YorhaPurple" },
+		NavicIconsConstant = { link = "YorhaOrange" },
+		NavicIconsString = { link = "YorhaGreen" },
+		NavicIconsNumber = { link = "YorhaOrange" },
+		NavicIconsBoolean = { link = "YorhaOrange" },
+		NavicIconsArray = { link = "YorhaOrange" },
+		NavicIconsObject = { link = "YorhaOrange" },
+		NavicIconsKey = { link = "YorhaAqua" },
+		NavicIconsNull = { link = "YorhaOrange" },
+		NavicIconsEnumMember = { link = "YorhaYellow" },
+		NavicIconsStruct = { link = "YorhaPurple" },
+		NavicIconsEvent = { link = "YorhaYellow" },
+		NavicIconsOperator = { link = "YorhaRed" },
+		NavicIconsTypeParameter = { link = "YorhaRed" },
+		NavicText = { link = "YorhaWhite" },
+		NavicSeparator = { link = "YorhaWhite" },
+		htmlTag = { link = "YorhaAquaBold" },
+		htmlEndTag = { link = "YorhaAquaBold" },
+		htmlTagName = { link = "YorhaBlue" },
+		htmlArg = { link = "YorhaOrange" },
+		htmlTagN = { link = "YorhaFg1" },
+		htmlSpecialTagName = { link = "YorhaBlue" },
+		htmlLink = { fg = colors.fg4, underline = config.underline },
+		htmlSpecialChar = { link = "YorhaRed" },
+		htmlBold = { fg = colors.fg0, bg = colors.bg0, bold = config.bold },
+		htmlBoldUnderline = { fg = colors.fg0, bg = colors.bg0, bold = config.bold, underline = config.underline },
+		htmlBoldItalic = { fg = colors.fg0, bg = colors.bg0, bold = config.bold, italic = true },
+		htmlBoldUnderlineItalic = {
+			fg = colors.fg0,
+			bg = colors.bg0,
+			bold = config.bold,
+			italic = true,
+			underline = config.underline,
+		},
+		htmlUnderline = { fg = colors.fg0, bg = colors.bg0, underline = config.underline },
+		htmlUnderlineItalic = {
+			fg = colors.fg0,
+			bg = colors.bg0,
+			italic = true,
+			underline = config.underline,
+		},
+		htmlItalic = { fg = colors.fg0, bg = colors.bg0, italic = true },
+		xmlTag = { link = "YorhaAquaBold" },
+		xmlEndTag = { link = "YorhaAquaBold" },
+		xmlTagName = { link = "YorhaBlue" },
+		xmlEqual = { link = "YorhaBlue" },
+		docbkKeyword = { link = "YorhaAquaBold" },
+		xmlDocTypeDecl = { link = "YorhaGray" },
+		xmlDocTypeKeyword = { link = "YorhaPurple" },
+		xmlCdataStart = { link = "YorhaGray" },
+		xmlCdataCdata = { link = "YorhaPurple" },
+		dtdFunction = { link = "YorhaGray" },
+		dtdTagName = { link = "YorhaPurple" },
+		xmlAttrib = { link = "YorhaOrange" },
+		xmlProcessingDelim = { link = "YorhaGray" },
+		dtdParamEntityPunct = { link = "YorhaGray" },
+		dtdParamEntityDPunct = { link = "YorhaGray" },
+		xmlAttribPunct = { link = "YorhaGray" },
+		xmlEntity = { link = "YorhaRed" },
+		xmlEntityPunct = { link = "YorhaRed" },
+		clojureKeyword = { link = "YorhaBlue" },
+		clojureCond = { link = "YorhaOrange" },
+		clojureSpecial = { link = "YorhaOrange" },
+		clojureDefine = { link = "YorhaOrange" },
+		clojureFunc = { link = "YorhaYellow" },
+		clojureRepeat = { link = "YorhaYellow" },
+		clojureCharacter = { link = "YorhaAqua" },
+		clojureStringEscape = { link = "YorhaAqua" },
+		clojureException = { link = "YorhaRed" },
+		clojureRegexp = { link = "YorhaAqua" },
+		clojureRegexpEscape = { link = "YorhaAqua" },
+		clojureRegexpCharClass = { fg = colors.fg3, bold = config.bold },
+		clojureRegexpMod = { link = "clojureRegexpCharClass" },
+		clojureRegexpQuantifier = { link = "clojureRegexpCharClass" },
+		clojureParen = { link = "YorhaFg3" },
+		clojureAnonArg = { link = "YorhaYellow" },
+		clojureVariable = { link = "YorhaBlue" },
+		clojureMacro = { link = "YorhaOrange" },
+		clojureMeta = { link = "YorhaYellow" },
+		clojureDeref = { link = "YorhaYellow" },
+		clojureQuote = { link = "YorhaYellow" },
+		clojureUnquote = { link = "YorhaYellow" },
+		cOperator = { link = "YorhaPurple" },
+		cppOperator = { link = "YorhaPurple" },
+		cStructure = { link = "YorhaOrange" },
+		pythonBuiltin = { link = "YorhaOrange" },
+		pythonBuiltinObj = { link = "YorhaOrange" },
+		pythonBuiltinFunc = { link = "YorhaOrange" },
+		pythonFunction = { link = "YorhaAqua" },
+		pythonDecorator = { link = "YorhaRed" },
+		pythonInclude = { link = "YorhaBlue" },
+		pythonImport = { link = "YorhaBlue" },
+		pythonRun = { link = "YorhaBlue" },
+		pythonCoding = { link = "YorhaBlue" },
+		pythonOperator = { link = "YorhaRed" },
+		pythonException = { link = "YorhaRed" },
+		pythonExceptions = { link = "YorhaPurple" },
+		pythonBoolean = { link = "YorhaPurple" },
+		pythonDot = { link = "YorhaFg3" },
+		pythonConditional = { link = "YorhaRed" },
+		pythonRepeat = { link = "YorhaRed" },
+		pythonDottedName = { link = "YorhaGreenBold" },
+		cssBraces = { link = "YorhaBlue" },
+		cssFunctionName = { link = "YorhaYellow" },
+		cssIdentifier = { link = "YorhaOrange" },
+		cssClassName = { link = "YorhaGreen" },
+		cssColor = { link = "YorhaBlue" },
+		cssSelectorOp = { link = "YorhaBlue" },
+		cssSelectorOp2 = { link = "YorhaBlue" },
+		cssImportant = { link = "YorhaGreen" },
+		cssVendor = { link = "YorhaFg1" },
+		cssTextProp = { link = "YorhaAqua" },
+		cssAnimationProp = { link = "YorhaAqua" },
+		cssUIProp = { link = "YorhaYellow" },
+		cssTransformProp = { link = "YorhaAqua" },
+		cssTransitionProp = { link = "YorhaAqua" },
+		cssPrintProp = { link = "YorhaAqua" },
+		cssPositioningProp = { link = "YorhaYellow" },
+		cssBoxProp = { link = "YorhaAqua" },
+		cssFontDescriptorProp = { link = "YorhaAqua" },
+		cssFlexibleBoxProp = { link = "YorhaAqua" },
+		cssBorderOutlineProp = { link = "YorhaAqua" },
+		cssBackgroundProp = { link = "YorhaAqua" },
+		cssMarginProp = { link = "YorhaAqua" },
+		cssListProp = { link = "YorhaAqua" },
+		cssTableProp = { link = "YorhaAqua" },
+		cssFontProp = { link = "YorhaAqua" },
+		cssPaddingProp = { link = "YorhaAqua" },
+		cssDimensionProp = { link = "YorhaAqua" },
+		cssRenderProp = { link = "YorhaAqua" },
+		cssColorProp = { link = "YorhaAqua" },
+		cssGeneratedContentProp = { link = "YorhaAqua" },
+		javaScriptBraces = { link = "YorhaFg1" },
+		javaScriptFunction = { link = "YorhaAqua" },
+		javaScriptIdentifier = { link = "YorhaRed" },
+		javaScriptMember = { link = "YorhaBlue" },
+		javaScriptNumber = { link = "YorhaPurple" },
+		javaScriptNull = { link = "YorhaPurple" },
+		javaScriptParens = { link = "YorhaFg3" },
+		typescriptReserved = { link = "YorhaAqua" },
+		typescriptLabel = { link = "YorhaAqua" },
+		typescriptFuncKeyword = { link = "YorhaAqua" },
+		typescriptIdentifier = { link = "YorhaOrange" },
+		typescriptBraces = { link = "YorhaFg1" },
+		typescriptEndColons = { link = "YorhaFg1" },
+		typescriptDOMObjects = { link = "YorhaFg1" },
+		typescriptAjaxMethods = { link = "YorhaFg1" },
+		typescriptLogicSymbols = { link = "YorhaFg1" },
+		typescriptDocSeeTag = { link = "Comment" },
+		typescriptDocParam = { link = "Comment" },
+		typescriptDocTags = { link = "vimCommentTitle" },
+		typescriptGlobalObjects = { link = "YorhaFg1" },
+		typescriptParens = { link = "YorhaFg3" },
+		typescriptOpSymbols = { link = "YorhaFg3" },
+		typescriptHtmlElemProperties = { link = "YorhaFg1" },
+		typescriptNull = { link = "YorhaPurple" },
+		typescriptInterpolationDelimiter = { link = "YorhaAqua" },
+		purescriptModuleKeyword = { link = "YorhaAqua" },
+		purescriptModuleName = { link = "YorhaFg1" },
+		purescriptWhere = { link = "YorhaAqua" },
+		purescriptDelimiter = { link = "YorhaFg4" },
+		purescriptType = { link = "YorhaFg1" },
+		purescriptImportKeyword = { link = "YorhaAqua" },
+		purescriptHidingKeyword = { link = "YorhaAqua" },
+		purescriptAsKeyword = { link = "YorhaAqua" },
+		purescriptStructure = { link = "YorhaAqua" },
+		purescriptOperator = { link = "YorhaBlue" },
+		purescriptTypeVar = { link = "YorhaFg1" },
+		purescriptConstructor = { link = "YorhaFg1" },
+		purescriptFunction = { link = "YorhaFg1" },
+		purescriptConditional = { link = "YorhaOrange" },
+		purescriptBacktick = { link = "YorhaOrange" },
+		coffeeExtendedOp = { link = "YorhaFg3" },
+		coffeeSpecialOp = { link = "YorhaFg3" },
+		coffeeCurly = { link = "YorhaOrange" },
+		coffeeParen = { link = "YorhaFg3" },
+		coffeeBracket = { link = "YorhaOrange" },
+		rubyStringDelimiter = { link = "YorhaGreen" },
+		rubyInterpolationDelimiter = { link = "YorhaAqua" },
+		rubyDefinedOperator = { link = "rubyKeyword" },
+		objcTypeModifier = { link = "YorhaRed" },
+		objcDirective = { link = "YorhaBlue" },
+		goDirective = { link = "YorhaAqua" },
+		goConstants = { link = "YorhaPurple" },
+		goDeclaration = { link = "YorhaRed" },
+		goDeclType = { link = "YorhaBlue" },
+		goBuiltins = { link = "YorhaOrange" },
+		luaIn = { link = "YorhaRed" },
+		luaFunction = { link = "YorhaAqua" },
+		luaTable = { link = "YorhaOrange" },
+		moonSpecialOp = { link = "YorhaFg3" },
+		moonExtendedOp = { link = "YorhaFg3" },
+		moonFunction = { link = "YorhaFg3" },
+		moonObject = { link = "YorhaYellow" },
+		javaAnnotation = { link = "YorhaBlue" },
+		javaDocTags = { link = "YorhaAqua" },
+		javaCommentTitle = { link = "vimCommentTitle" },
+		javaParen = { link = "YorhaFg3" },
+		javaParen1 = { link = "YorhaFg3" },
+		javaParen2 = { link = "YorhaFg3" },
+		javaParen3 = { link = "YorhaFg3" },
+		javaParen4 = { link = "YorhaFg3" },
+		javaParen5 = { link = "YorhaFg3" },
+		javaOperator = { link = "YorhaOrange" },
+		javaVarArg = { link = "YorhaGreen" },
+		elixirDocString = { link = "Comment" },
+		elixirStringDelimiter = { link = "YorhaGreen" },
+		elixirInterpolationDelimiter = { link = "YorhaAqua" },
+		elixirModuleDeclaration = { link = "YorhaYellow" },
+		scalaNameDefinition = { link = "YorhaFg1" },
+		scalaCaseFollowing = { link = "YorhaFg1" },
+		scalaCapitalWord = { link = "YorhaFg1" },
+		scalaTypeExtension = { link = "YorhaFg1" },
+		scalaKeyword = { link = "YorhaRed" },
+		scalaKeywordModifier = { link = "YorhaRed" },
+		scalaSpecial = { link = "YorhaAqua" },
+		scalaOperator = { link = "YorhaFg1" },
+		scalaTypeDeclaration = { link = "YorhaYellow" },
+		scalaTypeTypePostDeclaration = { link = "YorhaYellow" },
+		scalaInstanceDeclaration = { link = "YorhaFg1" },
+		scalaInterpolation = { link = "YorhaAqua" },
+		markdownItalic = { fg = colors.fg3, italic = true },
+		markdownBold = { fg = colors.fg3, bold = config.bold },
+		markdownBoldItalic = { fg = colors.fg3, bold = config.bold, italic = true },
+		markdownH1 = { link = "YorhaGreenBold" },
+		markdownH2 = { link = "YorhaGreenBold" },
+		markdownH3 = { link = "YorhaYellowBold" },
+		markdownH4 = { link = "YorhaYellowBold" },
+		markdownH5 = { link = "YorhaYellow" },
+		markdownH6 = { link = "YorhaYellow" },
+		markdownCode = { link = "YorhaAqua" },
+		markdownCodeBlock = { link = "YorhaAqua" },
+		markdownCodeDelimiter = { link = "YorhaAqua" },
+		markdownBlockquote = { link = "YorhaGray" },
+		markdownListMarker = { link = "YorhaGray" },
+		markdownOrderedListMarker = { link = "YorhaGray" },
+		markdownRule = { link = "YorhaGray" },
+		markdownHeadingRule = { link = "YorhaGray" },
+		markdownUrlDelimiter = { link = "YorhaFg3" },
+		markdownLinkDelimiter = { link = "YorhaFg3" },
+		markdownLinkTextDelimiter = { link = "YorhaFg3" },
+		markdownHeadingDelimiter = { link = "YorhaOrange" },
+		markdownUrl = { link = "YorhaPurple" },
+		markdownUrlTitleDelimiter = { link = "YorhaGreen" },
+		markdownLinkText = { fg = colors.gray, underline = config.underline },
+		markdownIdDeclaration = { link = "markdownLinkText" },
+		haskellType = { link = "YorhaBlue" },
+		haskellIdentifier = { link = "YorhaAqua" },
+		haskellSeparator = { link = "YorhaFg4" },
+		haskellDelimiter = { link = "YorhaOrange" },
+		haskellOperators = { link = "YorhaPurple" },
+		haskellBacktick = { link = "YorhaOrange" },
+		haskellStatement = { link = "YorhaPurple" },
+		haskellConditional = { link = "YorhaPurple" },
+		haskellLet = { link = "YorhaRed" },
+		haskellDefault = { link = "YorhaRed" },
+		haskellWhere = { link = "YorhaRed" },
+		haskellBottom = { link = "YorhaRedBold" },
+		haskellImportKeywords = { link = "YorhaPurpleBold" },
+		haskellDeclKeyword = { link = "YorhaOrange" },
+		haskellDecl = { link = "YorhaOrange" },
+		haskellDeriving = { link = "YorhaPurple" },
+		haskellAssocType = { link = "YorhaAqua" },
+		haskellNumber = { link = "YorhaAqua" },
+		haskellPragma = { link = "YorhaRedBold" },
+		haskellTH = { link = "YorhaAquaBold" },
+		haskellForeignKeywords = { link = "YorhaGreen" },
+		haskellKeyword = { link = "YorhaRed" },
+		haskellFloat = { link = "YorhaAqua" },
+		haskellInfix = { link = "YorhaPurple" },
+		haskellQuote = { link = "YorhaGreenBold" },
+		haskellShebang = { link = "YorhaYellowBold" },
+		haskellLiquid = { link = "YorhaPurpleBold" },
+		haskellQuasiQuoted = { link = "YorhaBlueBold" },
+		haskellRecursiveDo = { link = "YorhaPurple" },
+		haskellQuotedType = { link = "YorhaRed" },
+		haskellPreProc = { link = "YorhaFg4" },
+		haskellTypeRoles = { link = "YorhaRedBold" },
+		haskellTypeForall = { link = "YorhaRed" },
+		haskellPatternKeyword = { link = "YorhaBlue" },
+		jsonKeyword = { link = "YorhaGreen" },
+		jsonQuote = { link = "YorhaGreen" },
+		jsonBraces = { link = "YorhaFg1" },
+		jsonString = { link = "YorhaFg1" },
+		mailQuoted1 = { link = "YorhaAqua" },
+		mailQuoted2 = { link = "YorhaPurple" },
+		mailQuoted3 = { link = "YorhaYellow" },
+		mailQuoted4 = { link = "YorhaGreen" },
+		mailQuoted5 = { link = "YorhaRed" },
+		mailQuoted6 = { link = "YorhaOrange" },
+		mailSignature = { link = "Comment" },
+		csBraces = { link = "YorhaFg1" },
+		csEndColon = { link = "YorhaFg1" },
+		csLogicSymbols = { link = "YorhaFg1" },
+		csParens = { link = "YorhaFg3" },
+		csOpSymbols = { link = "YorhaFg3" },
+		csInterpolationDelimiter = { link = "YorhaFg3" },
+		csInterpolationAlignDel = { link = "YorhaAquaBold" },
+		csInterpolationFormat = { link = "YorhaAqua" },
+		csInterpolationFormatDel = { link = "YorhaAquaBold" },
+		rustSigil = { link = "YorhaOrange" },
+		rustEscape = { link = "YorhaAqua" },
+		rustStringContinuation = { link = "YorhaAqua" },
+		rustEnum = { link = "YorhaAqua" },
+		rustStructure = { link = "YorhaAqua" },
+		rustModPathSep = { link = "YorhaFg2" },
+		rustCommentLineDoc = { link = "Comment" },
+		rustDefault = { link = "YorhaAqua" },
+		ocamlOperator = { link = "YorhaFg1" },
+		ocamlKeyChar = { link = "YorhaOrange" },
+		ocamlArrow = { link = "YorhaOrange" },
+		ocamlInfixOpKeyword = { link = "YorhaRed" },
+		ocamlConstructor = { link = "YorhaOrange" },
+		LspSagaCodeActionTitle = { link = "Title" },
+		LspSagaCodeActionBorder = { link = "YorhaFg1" },
+		LspSagaCodeActionContent = { fg = colors.green, bold = config.bold },
+		LspSagaLspFinderBorder = { link = "YorhaFg1" },
+		LspSagaAutoPreview = { link = "YorhaOrange" },
+		TargetWord = { fg = colors.blue, bold = config.bold },
+		FinderSeparator = { link = "YorhaAqua" },
+		LspSagaDefPreviewBorder = { link = "YorhaBlue" },
+		LspSagaHoverBorder = { link = "YorhaOrange" },
+		LspSagaRenameBorder = { link = "YorhaBlue" },
+		LspSagaDiagnosticSource = { link = "YorhaOrange" },
+		LspSagaDiagnosticBorder = { link = "YorhaPurple" },
+		LspSagaDiagnosticHeader = { link = "YorhaGreen" },
+		LspSagaSignatureHelpBorder = { link = "YorhaGreen" },
+		SagaShadow = { link = "YorhaBg0" },
+		DashboardShortCut = { link = "YorhaOrange" },
+		DashboardHeader = { link = "YorhaAqua" },
+		DashboardCenter = { link = "YorhaYellow" },
+		DashboardFooter = { fg = colors.purple, italic = true },
+		MasonHighlight = { link = "YorhaAqua" },
+		MasonHighlightBlock = { fg = colors.bg0, bg = colors.blue },
+		MasonHighlightBlockBold = { fg = colors.bg0, bg = colors.blue, bold = true },
+		MasonHighlightSecondary = { fg = colors.yellow },
+		MasonHighlightBlockSecondary = { fg = colors.bg0, bg = colors.yellow },
+		MasonHighlightBlockBoldSecondary = { fg = colors.bg0, bg = colors.yellow, bold = true },
+		MasonHeader = { link = "MasonHighlightBlockBoldSecondary" },
+		MasonHeaderSecondary = { link = "MasonHighlightBlockBold" },
+		MasonMuted = { fg = colors.fg4 },
+		MasonMutedBlock = { fg = colors.bg0, bg = colors.fg4 },
+		MasonMutedBlockBold = { fg = colors.bg0, bg = colors.fg4, bold = true },
+		LspInlayHint = { link = "comment" },
+		CarbonFile = { link = "YorhaFg1" },
+		CarbonExe = { link = "YorhaYellow" },
+		CarbonSymlink = { link = "YorhaAqua" },
+		CarbonBrokenSymlink = { link = "YorhaRed" },
+		CarbonIndicator = { link = "YorhaGray" },
+		CarbonDanger = { link = "YorhaRed" },
+		CarbonPending = { link = "YorhaYellow" },
+		NoiceCursor = { link = "TermCursor" },
+		NoiceCmdlinePopupBorder = { fg = colors.blue, bg = nil },
+		NoiceCmdlineIcon = { link = "NoiceCmdlinePopupBorder" },
+		NoiceConfirmBorder = { link = "NoiceCmdlinePopupBorder" },
+		NoiceCmdlinePopupBorderSearch = { fg = colors.yellow, bg = nil },
+		NoiceCmdlineIconSearch = { link = "NoiceCmdlinePopupBorderSearch" },
+		NotifyDEBUGBorder = { link = "YorhaBlue" },
+		NotifyDEBUGIcon = { link = "YorhaBlue" },
+		NotifyDEBUGTitle = { link = "YorhaBlue" },
+		NotifyERRORBorder = { link = "YorhaRed" },
+		NotifyERRORIcon = { link = "YorhaRed" },
+		NotifyERRORTitle = { link = "YorhaRed" },
+		NotifyINFOBorder = { link = "YorhaAqua" },
+		NotifyINFOIcon = { link = "YorhaAqua" },
+		NotifyINFOTitle = { link = "YorhaAqua" },
+		NotifyTRACEBorder = { link = "YorhaGreen" },
+		NotifyTRACEIcon = { link = "YorhaGreen" },
+		NotifyTRACETitle = { link = "YorhaGreen" },
+		NotifyWARNBorder = { link = "YorhaYellow" },
+		NotifyWARNIcon = { link = "YorhaYellow" },
+		NotifyWARNTitle = { link = "YorhaYellow" },
+		IlluminatedWordText = { link = "LspReferenceText" },
+		IlluminatedWordRead = { link = "LspReferenceRead" },
+		IlluminatedWordWrite = { link = "LspReferenceWrite" },
+		TSRainbowRed = { fg = colors.red },
+		TSRainbowOrange = { fg = colors.orange },
+		TSRainbowYellow = { fg = colors.yellow },
+		TSRainbowGreen = { fg = colors.green },
+		TSRainbowBlue = { fg = colors.blue },
+		TSRainbowViolet = { fg = colors.purple },
+		TSRainbowCyan = { fg = colors.aqua },
+		RainbowDelimiterRed = { fg = colors.red },
+		RainbowDelimiterOrange = { fg = colors.orange },
+		RainbowDelimiterYellow = { fg = colors.yellow },
+		RainbowDelimiterGreen = { fg = colors.green },
+		RainbowDelimiterBlue = { fg = colors.blue },
+		RainbowDelimiterViolet = { fg = colors.purple },
+		RainbowDelimiterCyan = { fg = colors.aqua },
+		DapBreakpointSymbol = { fg = colors.red, bg = colors.bg1 },
+		DapStoppedSymbol = { fg = colors.green, bg = colors.bg1 },
+		DapUIBreakpointsCurrentLine = { link = "YorhaYellow" },
+		DapUIBreakpointsDisabledLine = { link = "YorhaGray" },
+		DapUIBreakpointsInfo = { link = "YorhaAqua" },
+		DapUIBreakpointsLine = { link = "YorhaYellow" },
+		DapUIBreakpointsPath = { link = "YorhaBlue" },
+		DapUICurrentFrameName = { link = "YorhaPurple" },
+		DapUIDecoration = { link = "YorhaPurple" },
+		DapUIEndofBuffer = { link = "EndOfBuffer" },
+		DapUIFloatBorder = { link = "YorhaAqua" },
+		DapUILineNumber = { link = "YorhaYellow" },
+		DapUIModifiedValue = { link = "YorhaRed" },
+		DapUIPlayPause = { fg = colors.green, bg = colors.bg1 },
+		DapUIRestart = { fg = colors.green, bg = colors.bg1 },
+		DapUIScope = { link = "YorhaBlue" },
+		DapUISource = { link = "YorhaFg1" },
+		DapUIStepBack = { fg = colors.blue, bg = colors.bg1 },
+		DapUIStepInto = { fg = colors.blue, bg = colors.bg1 },
+		DapUIStepOut = { fg = colors.blue, bg = colors.bg1 },
+		DapUIStepOver = { fg = colors.blue, bg = colors.bg1 },
+		DapUIStop = { fg = colors.red, bg = colors.bg1 },
+		DapUIStoppedThread = { link = "YorhaBlue" },
+		DapUIThread = { link = "YorhaBlue" },
+		DapUIType = { link = "YorhaOrange" },
+		DapUIUnavailable = { link = "YorhaGray" },
+		DapUIWatchesEmpty = { link = "YorhaGray" },
+		DapUIWatchesError = { link = "YorhaRed" },
+		DapUIWatchesValue = { link = "YorhaYellow" },
+		DapUIWinSelect = { link = "YorhaYellow" },
+		NeogitDiffDelete = { link = "DiffDelete" },
+		NeogitDiffAdd = { link = "DiffAdd" },
+		NeogitHunkHeader = { link = "WinBar" },
+		NeogitHunkHeaderHighlight = { link = "WinBarNC" },
+		DiffviewStatusModified = { link = "YorhaGreenBold" },
+		DiffviewFilePanelInsertions = { link = "YorhaGreenBold" },
+		DiffviewFilePanelDeletions = { link = "YorhaRedBold" },
+		MiniAnimateCursor = { reverse = true, nocombine = true },
+		MiniAnimateNormalFloat = { fg = colors.fg1, bg = colors.bg1 },
+		MiniClueBorder = { link = "FloatBorder" },
+		MiniClueDescGroup = { link = "DiagnosticFloatingWarn" },
+		MiniClueDescSingle = { link = "NormalFloat" },
+		MiniClueNextKey = { link = "DiagnosticFloatingHint" },
+		MiniClueNextKeyWithPostkeys = { link = "DiagnosticFloatingError" },
+		MiniClueSeparator = { link = "DiagnosticFloatingInfo" },
+		MiniClueTitle = { link = "FloatTitle" },
+		MiniCompletionActiveParameter = { underline = true },
+		MiniCursorword = { underline = true },
+		MiniCursorwordCurrent = { underline = true },
+		MiniDepsChangeAdded = { link = "YorhaGreen" },
+		MiniDepsChangeRemoved = { link = "YorhaRed" },
+		MiniDepsHint = { link = "DiagnosticHint" },
+		MiniDepsInfo = { link = "DiagnosticInfo" },
+		MiniDepsMsgBreaking = { link = "DiagnosticWarn" },
+		MiniDepsPlaceholder = { link = "Comment" },
+		MiniDepsTitle = { link = "Title" },
+		MiniDepsTitleError = { link = "DiffDelete" },
+		MiniDepsTitleSame = { link = "DiffChange" },
+		MiniDepsTitleUpdate = { link = "DiffAdd" },
+		MiniDiffOverAdd = { link = "DiffAdd" },
+		MiniDiffOverChange = { link = "DiffText" },
+		MiniDiffOverContext = { link = "DiffChange" },
+		MiniDiffOverDelete = { link = "DiffDelete" },
+		MiniDiffSignAdd = { link = "YorhaGreen" },
+		MiniDiffSignChange = { link = "YorhaAqua" },
+		MiniDiffSignDelete = { link = "YorhaRed" },
+		MiniFilesBorder = { link = "FloatBorder" },
+		MiniFilesBorderModified = { link = "DiagnosticFloatingWarn" },
+		MiniFilesCursorLine = { bg = colors.bg2 },
+		MiniFilesDirectory = { link = "Directory" },
+		MiniFilesFile = { link = "YorhaFg1" },
+		MiniFilesNormal = { link = "NormalFloat" },
+		MiniFilesTitle = { link = "FloatTitle" },
+		MiniFilesTitleFocused = { link = "YorhaOrangeBold" },
+		MiniHipatternsFixme = { fg = colors.bg0, bg = colors.red, bold = config.bold },
+		MiniHipatternsHack = { fg = colors.bg0, bg = colors.yellow, bold = config.bold },
+		MiniHipatternsNote = { fg = colors.bg0, bg = colors.blue, bold = config.bold },
+		MiniHipatternsTodo = { fg = colors.bg0, bg = colors.aqua, bold = config.bold },
+		MiniIconsAzure = { link = "YorhaBlue" },
+		MiniIconsBlue = { link = "YorhaBlue" },
+		MiniIconsCyan = { link = "YorhaAqua" },
+		MiniIconsGreen = { link = "YorhaGreen" },
+		MiniIconsGrey = { link = "YorhaFg0" },
+		MiniIconsOrange = { link = "YorhaOrange" },
+		MiniIconsPurple = { link = "YorhaPurple" },
+		MiniIconsRed = { link = "YorhaRed" },
+		MiniIconsYellow = { link = "YorhaYellow" },
+		MiniIndentscopeSymbol = { link = "YorhaGray" },
+		MiniIndentscopeSymbolOff = { link = "YorhaYellow" },
+		MiniJump = { link = "YorhaOrangeUnderline" },
+		MiniJump2dDim = { link = "YorhaGray" },
+		MiniJump2dSpot = { fg = colors.orange, bold = config.bold, nocombine = true },
+		MiniJump2dSpotAhead = { fg = colors.aqua, bg = colors.bg0, nocombine = true },
+		MiniJump2dSpotUnique = { fg = colors.yellow, bold = config.bold, nocombine = true },
+		MiniMapNormal = { link = "NormalFloat" },
+		MiniMapSymbolCount = { link = "Special" },
+		MiniMapSymbolLine = { link = "Title" },
+		MiniMapSymbolView = { link = "Delimiter" },
+		MiniNotifyBorder = { link = "FloatBorder" },
+		MiniNotifyNormal = { link = "NormalFloat" },
+		MiniNotifyTitle = { link = "FloatTitle" },
+		MiniOperatorsExchangeFrom = { link = "IncSearch" },
+		MiniPickBorder = { link = "FloatBorder" },
+		MiniPickBorderBusy = { link = "DiagnosticFloatingWarn" },
+		MiniPickBorderText = { link = "FloatTitle" },
+		MiniPickIconDirectory = { link = "Directory" },
+		MiniPickIconFile = { link = "MiniPickNormal" },
+		MiniPickHeader = { link = "DiagnosticFloatingHint" },
+		MiniPickMatchCurrent = { bg = colors.bg2 },
+		MiniPickMatchMarked = { link = "Visual" },
+		MiniPickMatchRanges = { link = "DiagnosticFloatingHint" },
+		MiniPickNormal = { link = "NormalFloat" },
+		MiniPickPreviewLine = { link = "CursorLine" },
+		MiniPickPreviewRegion = { link = "IncSearch" },
+		MiniPickPrompt = { link = "DiagnosticFloatingInfo" },
+		MiniStarterCurrent = { nocombine = true },
+		MiniStarterFooter = { link = "YorhaGray" },
+		MiniStarterHeader = { link = "Title" },
+		MiniStarterInactive = { link = "Comment" },
+		MiniStarterItem = { link = "Normal" },
+		MiniStarterItemBullet = { link = "Delimiter" },
+		MiniStarterItemPrefix = { link = "WarningMsg" },
+		MiniStarterSection = { link = "Delimiter" },
+		MiniStarterQuery = { link = "MoreMsg" },
+		MiniStatuslineDevinfo = { link = "StatusLine" },
+		MiniStatuslineFileinfo = { link = "StatusLine" },
+		MiniStatuslineFilename = { link = "StatusLineNC" },
+		MiniStatuslineInactive = { link = "StatusLineNC" },
+		MiniStatuslineModeCommand = { fg = colors.bg0, bg = colors.yellow, bold = config.bold, nocombine = true },
+		MiniStatuslineModeInsert = { fg = colors.bg0, bg = colors.blue, bold = config.bold, nocombine = true },
+		MiniStatuslineModeNormal = { fg = colors.bg0, bg = colors.fg1, bold = config.bold, nocombine = true },
+		MiniStatuslineModeOther = { fg = colors.bg0, bg = colors.aqua, bold = config.bold, nocombine = true },
+		MiniStatuslineModeReplace = { fg = colors.bg0, bg = colors.red, bold = config.bold, nocombine = true },
+		MiniStatuslineModeVisual = { fg = colors.bg0, bg = colors.green, bold = config.bold, nocombine = true },
+		MiniSurround = { link = "IncSearch" },
+		MiniTablineCurrent = { fg = colors.green, bg = colors.bg1, bold = config.bold, reverse = config.invert_tabline },
+		MiniTablineFill = { link = "TabLineFill" },
+		MiniTablineHidden = { fg = colors.bg4, bg = colors.bg1, reverse = config.invert_tabline },
+		MiniTablineModifiedCurrent = {
+			fg = colors.bg1,
+			bg = colors.green,
+			bold = config.bold,
+			reverse = config.invert_tabline,
+		},
+		MiniTablineModifiedHidden = { fg = colors.bg1, bg = colors.bg4, reverse = config.invert_tabline },
+		MiniTablineModifiedVisible = { fg = colors.bg1, bg = colors.fg1, reverse = config.invert_tabline },
+		MiniTablineTabpagesection = { link = "Search" },
+		MiniTablineVisible = { fg = colors.fg1, bg = colors.bg1, reverse = config.invert_tabline },
+		MiniTestEmphasis = { bold = config.bold },
+		MiniTestFail = { link = "YorhaRedBold" },
+		MiniTestPass = { link = "YorhaGreenBold" },
+		MiniTrailspace = { bg = colors.red },
+		WhichKeyTitle = { link = "NormalFloat" },
+		NeoTreeFloatBorder = { link = "YorhaGray" },
+		NeoTreeTitleBar = { fg = colors.fg1, bg = colors.bg2 },
+		NeoTreeDirectoryIcon = { link = "YorhaGreen" },
+		NeoTreeDirectoryName = { link = "YorhaGreenBold" },
+		["@comment"] = { link = "Comment" },
+		["@none"] = { bg = "NONE", fg = "NONE" },
+		["@preproc"] = { link = "PreProc" },
+		["@define"] = { link = "Define" },
+		["@operator"] = { link = "Operator" },
+		["@punctuation.delimiter"] = { link = "Delimiter" },
+		["@punctuation.bracket"] = { link = "Delimiter" },
+		["@punctuation.special"] = { link = "Delimiter" },
+		["@string"] = { link = "String" },
+		["@string.regex"] = { link = "String" },
+		["@string.regexp"] = { link = "String" },
+		["@string.escape"] = { link = "SpecialChar" },
+		["@string.special"] = { link = "SpecialChar" },
+		["@string.special.path"] = { link = "Underlined" },
+		["@string.special.symbol"] = { link = "Identifier" },
+		["@string.special.url"] = { link = "Underlined" },
+		["@character"] = { link = "Character" },
+		["@character.special"] = { link = "SpecialChar" },
+		["@boolean"] = { link = "Boolean" },
+		["@number"] = { link = "Number" },
+		["@number.float"] = { link = "Float" },
+		["@float"] = { link = "Float" },
+		["@function"] = { link = "Function" },
+		["@function.builtin"] = { link = "Special" },
+		["@function.call"] = { link = "Function" },
+		["@function.macro"] = { link = "Macro" },
+		["@function.method"] = { link = "Function" },
+		["@method"] = { link = "Function" },
+		["@method.call"] = { link = "Function" },
+		["@constructor"] = { link = "Special" },
+		["@parameter"] = { link = "Identifier" },
+		["@keyword"] = { link = "Keyword" },
+		["@keyword.conditional"] = { link = "Conditional" },
+		["@keyword.debug"] = { link = "Debug" },
+		["@keyword.directive"] = { link = "PreProc" },
+		["@keyword.directive.define"] = { link = "Define" },
+		["@keyword.exception"] = { link = "Exception" },
+		["@keyword.function"] = { link = "Keyword" },
+		["@keyword.import"] = { link = "Include" },
+		["@keyword.operator"] = { link = "YorhaRed" },
+		["@keyword.repeat"] = { link = "Repeat" },
+		["@keyword.return"] = { link = "Keyword" },
+		["@keyword.storage"] = { link = "StorageClass" },
+		["@conditional"] = { link = "Conditional" },
+		["@repeat"] = { link = "Repeat" },
+		["@debug"] = { link = "Debug" },
+		["@label"] = { link = "Label" },
+		["@include"] = { link = "Include" },
+		["@exception"] = { link = "Exception" },
+		["@type"] = { link = "Type" },
+		["@type.builtin"] = { link = "Type" },
+		["@type.definition"] = { link = "Typedef" },
+		["@type.qualifier"] = { link = "Type" },
+		["@storageclass"] = { link = "StorageClass" },
+		["@attribute"] = { link = "PreProc" },
+		["@field"] = { link = "Identifier" },
+		["@property"] = { link = "Identifier" },
+		["@variable"] = { link = "YorhaFg1" },
+		["@variable.builtin"] = { link = "Special" },
+		["@variable.member"] = { link = "Identifier" },
+		["@variable.parameter"] = { link = "Identifier" },
+		["@constant"] = { link = "Constant" },
+		["@constant.builtin"] = { link = "Special" },
+		["@constant.macro"] = { link = "Define" },
+		["@markup"] = { link = "YorhaFg1" },
+		["@markup.strong"] = { bold = config.bold },
+		["@markup.italic"] = { link = "@text.emphasis" },
+		["@markup.underline"] = { underline = config.underline },
+		["@markup.strikethrough"] = { strikethrough = config.strikethrough },
+		["@markup.heading"] = { link = "Title" },
+		["@markup.raw"] = { link = "String" },
+		["@markup.math"] = { link = "Special" },
+		["@markup.environment"] = { link = "Macro" },
+		["@markup.environment.name"] = { link = "Type" },
+		["@markup.link"] = { link = "Underlined" },
+		["@markup.link.label"] = { link = "SpecialChar" },
+		["@markup.list"] = { link = "Delimiter" },
+		["@markup.list.checked"] = { link = "YorhaGreen" },
+		["@markup.list.unchecked"] = { link = "YorhaGray" },
+		["@comment.todo"] = { link = "Todo" },
+		["@comment.note"] = { link = "SpecialComment" },
+		["@comment.warning"] = { link = "WarningMsg" },
+		["@comment.error"] = { link = "ErrorMsg" },
+		["@diff.plus"] = { link = "diffAdded" },
+		["@diff.minus"] = { link = "diffRemoved" },
+		["@diff.delta"] = { link = "diffChanged" },
+		["@module"] = { link = "YorhaFg1" },
+		["@namespace"] = { link = "YorhaFg1" },
+		["@symbol"] = { link = "Identifier" },
+		["@text"] = { link = "YorhaFg1" },
+		["@text.strong"] = { bold = config.bold },
+		["@text.emphasis"] = { italic = config.italic.emphasis },
+		["@text.underline"] = { underline = config.underline },
+		["@text.strike"] = { strikethrough = config.strikethrough },
+		["@text.title"] = { link = "Title" },
+		["@text.literal"] = { link = "String" },
+		["@text.uri"] = { link = "Underlined" },
+		["@text.math"] = { link = "Special" },
+		["@text.environment"] = { link = "Macro" },
+		["@text.environment.name"] = { link = "Type" },
+		["@text.reference"] = { link = "Constant" },
+		["@text.todo"] = { link = "Todo" },
+		["@text.todo.checked"] = { link = "YorhaGreen" },
+		["@text.todo.unchecked"] = { link = "YorhaGray" },
+		["@text.note"] = { link = "SpecialComment" },
+		["@text.note.comment"] = { fg = colors.purple, bold = config.bold },
+		["@text.warning"] = { link = "WarningMsg" },
+		["@text.danger"] = { link = "ErrorMsg" },
+		["@text.danger.comment"] = { fg = colors.fg0, bg = colors.red, bold = config.bold },
+		["@text.diff.add"] = { link = "diffAdded" },
+		["@text.diff.delete"] = { link = "diffRemoved" },
+		["@tag"] = { link = "Tag" },
+		["@tag.attribute"] = { link = "Identifier" },
+		["@tag.delimiter"] = { link = "Delimiter" },
+		["@punctuation"] = { link = "Delimiter" },
+		["@macro"] = { link = "Macro" },
+		["@structure"] = { link = "Structure" },
+		["@lsp.type.class"] = { link = "@type" },
+		["@lsp.type.comment"] = { link = "@comment" },
+		["@lsp.type.decorator"] = { link = "@macro" },
+		["@lsp.type.enum"] = { link = "@type" },
+		["@lsp.type.enumMember"] = { link = "@constant" },
+		["@lsp.type.function"] = { link = "@function" },
+		["@lsp.type.interface"] = { link = "@constructor" },
+		["@lsp.type.macro"] = { link = "@macro" },
+		["@lsp.type.method"] = { link = "@method" },
+		["@lsp.type.modifier.java"] = { link = "@keyword.type.java" },
+		["@lsp.type.namespace"] = { link = "@namespace" },
+		["@lsp.type.parameter"] = { link = "@parameter" },
+		["@lsp.type.property"] = { link = "@property" },
+		["@lsp.type.struct"] = { link = "@type" },
+		["@lsp.type.type"] = { link = "@type" },
+		["@lsp.type.typeParameter"] = { link = "@type.definition" },
+		["@lsp.type.variable"] = { link = "@variable" },
+
+		-- NeoTreeDirectoryName = { link = "Directory" },
+		-- NeoTreeDotfile = { fg = colors.fg4 },
+		-- NeoTreeFadeText1 = { fg = colors.fg3 },
+		-- NeoTreeFadeText2 = { fg = colors.fg4 },
+		-- NeoTreeFileIcon = { fg = colors.blue },
+		-- NeoTreeFileName = { fg = colors.fg1 },
+		-- NeoTreeFileNameOpened = { fg = colors.fg1, bold = true },
+		-- NeoTreeFileStats = { fg = colors.fg3 },
+		-- NeoTreeFileStatsHeader = { fg = colors.fg2, italic = true },
+		-- NeoTreeFilterTerm = { link = "SpecialChar" },
+		-- NeoTreeHiddenByName = { link = "NeoTreeDotfile" },
+		-- NeoTreeIndentMarker = { fg = colors.fg4 },
+		-- NeoTreeMessage = { fg = colors.fg3, italic = true },
+		-- NeoTreeModified = { fg = colors.yellow },
+		-- NeoTreeRootName = { fg = colors.fg1, bold = true, italic = true },
+		-- NeoTreeSymbolicLinkTarget = { link = "NeoTreeFileName" },
+		-- NeoTreeExpander = { fg = colors.fg4 },
+		-- NeoTreeWindowsHidden = { link = "NeoTreeDotfile" },
+		-- NeoTreePreview = { link = "Search" },
+		-- NeoTreeGitAdded = { link = "GitGutterAdd" },
+		-- NeoTreeGitConflict = { fg = colors.orange, bold = true, italic = true },
+		-- NeoTreeGitDeleted = { link = "GitGutterDelete" },
+		-- NeoTreeGitIgnored = { link = "NeoTreeDotfile" },
+		-- NeoTreeGitModified = { link = "GitGutterChange" },
+		-- NeoTreeGitRenamed = { link = "NeoTreeGitModified" },
+		-- NeoTreeGitStaged = { link = "NeoTreeGitAdded" },
+		-- NeoTreeGitUntracked = { fg = colors.orange, italic = true },
+		-- NeoTreeGitUnstaged = { link = "NeoTreeGitConflict" },
+		-- NeoTreeTabActive = { fg = colors.fg1, bold = true },
+		-- NeoTreeTabInactive = { fg = colors.fg4, bg = colors.bg1 },
+		-- NeoTreeTabSeparatorActive = { fg = colors.bg1 },
+		-- NeoTreeTabSeparatorInactive = { fg = colors.bg2, bg = colors.bg1 },
+	}
+
+	for group, hl in pairs(config.overrides) do
+		if groups[group] then
+			-- "link" should not mix with other configs (:h hi-link)
+			groups[group].link = nil
+		end
+
+		groups[group] = vim.tbl_extend("force", groups[group] or {}, hl)
+	end
+
+	return groups
+end
+
+---@param config YorhaConfig?
+Yorha.setup = function(config)
+	Yorha.config = vim.deepcopy(default_config)
+	Yorha.config = vim.tbl_deep_extend("force", Yorha.config, config or {})
+end
+
+--- main load function
+Yorha.load = function()
+	if vim.version().minor < 8 then
+		vim.notify_once("yorha.nvim: you must use neovim 0.8 or higher")
+		return
+	end
+
+	-- reset colors
+	if vim.g.colors_name then
+		vim.cmd.hi("clear")
+	end
+	vim.g.colors_name = "gruvbox"
+	vim.o.termguicolors = true
+
+	local groups = get_groups()
+
+	-- add highlights
+	for group, settings in pairs(groups) do
+		vim.api.nvim_set_hl(0, group, settings)
+	end
+end
+
+return Yorha
+--[[
+
+if &background == 'light'
+  let s:guishade0 = "#C8C2AA"
+  let s:guishade1 = "#B6B19B"
+  let s:guishade2 = "#A59F8B"
+  let s:guishade3 = "#938E7C"
+  let s:guishade4 = "#827D6C"
+  let s:guishade5 = "#706C5D"
+  let s:guishade6 = "#5F5A4D"
+  let s:guishade7 = "#4D493E"
+  let s:guiaccent0 = "#CC664D"
+  let s:guiaccent1 = "#4D493E"
+  let s:guiaccent2 = "#62473B"
+  let s:guiaccent3 = "#727B5B"
+  let s:guiaccent4 = "#4D493E"
+  let s:guiaccent5 = "#4D493E"
+  let s:guiaccent6 = "#4D493E"
+  let s:guiaccent7 = "#4D493E"
+  let s:ctermshade0 = 187
+  let s:ctermshade1 = 181
+  let s:ctermshade2 = 145
+  let s:ctermshade3 = 144
+  let s:ctermshade4 = 138
+  let s:ctermshade5 = 102
+  let s:ctermshade6 = 102
+  let s:ctermshade7 = 95
+  let s:ctermaccent0 = 174
+  let s:ctermaccent1 = 95
+  let s:ctermaccent2 = 95
+  let s:ctermaccent3 = 102
+  let s:ctermaccent4 = 95
+  let s:ctermaccent5 = 95
+  let s:ctermaccent6 = 95
+  let s:ctermaccent7 = 95
+endif
+
+highlight clear
+syntax reset
+let g:colors_name = "ThemerMyColorSet"
+
+""""""""""
+" Normal "
+""""""""""
+
+exec "hi Normal guifg=".s:guishade6." guibg=".s:guishade0
+exec "hi Normal ctermfg=".s:ctermshade6." ctermbg=".s:ctermshade0
+
+"""""""""""""""""
+" Syntax groups "
+"""""""""""""""""
+
+" Default
+
+exec "hi Comment guifg=".s:guishade2
+exec "hi Comment ctermfg=".s:ctermshade2
+exec "hi Constant guifg=".s:guiaccent3
+exec "hi Constant ctermfg=".s:ctermaccent3
+exec "hi Character guifg=".s:guiaccent4
+exec "hi Character ctermfg=".s:ctermaccent4
+exec "hi Identifier guifg=".s:guiaccent2." gui=none"
+exec "hi Identifier ctermfg=".s:ctermaccent2." cterm=none"
+exec "hi Statement guifg=".s:guiaccent5
+exec "hi Statement ctermfg=".s:ctermaccent5
+exec "hi PreProc guifg=".s:guiaccent6
+exec "hi PreProc ctermfg=".s:ctermaccent6
+exec "hi Type guifg=".s:guiaccent7
+exec "hi Type ctermfg=".s:ctermaccent7
+exec "hi Special guifg=".s:guiaccent4
+exec "hi Special ctermfg=".s:ctermaccent4
+exec "hi Underlined guifg=".s:guiaccent5
+exec "hi Underlined ctermfg=".s:ctermaccent5
+exec "hi Error guifg=".s:guiaccent0." guibg=".s:guishade1
+exec "hi Error ctermfg=".s:ctermaccent0." ctermbg=".s:ctermshade1
+exec "hi Todo guifg=".s:guiaccent0." guibg=".s:guishade1
+exec "hi Todo ctermfg=".s:ctermaccent0." ctermbg=".s:ctermshade1
+exec "hi Function guifg=".s:guiaccent1
+exec "hi Function ctermfg=".s:ctermaccent1
+
+" GitGutter
+
+exec "hi GitGutterAdd guifg=".s:guiaccent3
+exec "hi GitGutterAdd ctermfg=".s:ctermaccent3
+exec "hi GitGutterChange guifg=".s:guiaccent2
+exec "hi GitGutterChange ctermfg=".s:ctermaccent2
+exec "hi GitGutterChangeDelete guifg=".s:guiaccent2
+exec "hi GitGutterChangeDelete ctermfg=".s:ctermaccent2
+exec "hi GitGutterDelete guifg=".s:guiaccent0
+exec "hi GitGutterDelete ctermfg=".s:ctermaccent0
+
+" fugitive
+
+exec "hi gitcommitComment guifg=".s:guishade3
+exec "hi gitcommitComment ctermfg=".s:ctermshade3
+exec "hi gitcommitOnBranch guifg=".s:guishade3
+exec "hi gitcommitOnBranch ctermfg=".s:ctermshade3
+exec "hi gitcommitHeader guifg=".s:guishade5
+exec "hi gitcommitHeader ctermfg=".s:ctermshade5
+exec "hi gitcommitHead guifg=".s:guishade3
+exec "hi gitcommitHead ctermfg=".s:ctermshade3
+exec "hi gitcommitSelectedType guifg=".s:guiaccent3
+exec "hi gitcommitSelectedType ctermfg=".s:ctermaccent3
+exec "hi gitcommitSelectedFile guifg=".s:guiaccent3
+exec "hi gitcommitSelectedFile ctermfg=".s:ctermaccent3
+exec "hi gitcommitDiscardedType guifg=".s:guiaccent2
+exec "hi gitcommitDiscardedType ctermfg=".s:ctermaccent2
+exec "hi gitcommitDiscardedFile guifg=".s:guiaccent2
+exec "hi gitcommitDiscardedFile ctermfg=".s:ctermaccent2
+exec "hi gitcommitUntrackedFile guifg=".s:guiaccent0
+exec "hi gitcommitUntrackedFile ctermfg=".s:ctermaccent0
+
+"""""""""""""""""""""""
+" Highlighting Groups "
+"""""""""""""""""""""""
+
+" Default
+
+exec "hi ColorColumn guibg=".s:guishade1
+exec "hi ColorColumn ctermbg=".s:ctermshade1
+exec "hi Conceal guifg=".s:guishade2
+exec "hi Conceal ctermfg=".s:ctermshade2
+exec "hi Cursor guifg=".s:guishade0
+exec "hi Cursor ctermfg=".s:ctermshade0
+exec "hi CursorColumn guibg=".s:guishade1
+exec "hi CursorColumn ctermbg=".s:ctermshade1
+exec "hi CursorLine guibg=".s:guishade1
+exec "hi CursorLine ctermbg=".s:ctermshade1." cterm=none"
+exec "hi Directory guifg=".s:guiaccent5
+exec "hi Directory ctermfg=".s:ctermaccent5
+exec "hi DiffAdd guifg=".s:guiaccent3." guibg=".s:guishade1
+exec "hi DiffAdd ctermfg=".s:ctermaccent3." ctermbg=".s:ctermshade1
+exec "hi DiffChange guifg=".s:guiaccent2." guibg=".s:guishade1
+exec "hi DiffChange ctermfg=".s:ctermaccent2." ctermbg=".s:ctermshade1
+exec "hi DiffDelete guifg=".s:guiaccent0." guibg=".s:guishade1
+exec "hi DiffDelete ctermfg=".s:ctermaccent0." ctermbg=".s:ctermshade1
+exec "hi DiffText guifg=".s:guiaccent2." guibg=".s:guishade2
+exec "hi DiffText ctermfg=".s:ctermaccent2." ctermbg=".s:ctermshade2
+exec "hi ErrorMsg guifg=".s:guishade7." guibg=".s:guiaccent0
+exec "hi ErrorMsg ctermfg=".s:ctermshade7." ctermbg=".s:ctermaccent0
+exec "hi VertSplit guifg=".s:guishade0." guibg=".s:guishade3
+exec "hi VertSplit ctermfg=".s:ctermshade0." ctermbg=".s:ctermshade3
+exec "hi Folded guifg=".s:guishade4." guibg=".s:guishade1
+exec "hi Folded ctermfg=".s:ctermshade4." ctermbg=".s:ctermshade1
+exec "hi FoldColumn guifg=".s:guishade4." guibg=".s:guishade1
+exec "hi FoldColumn ctermfg=".s:ctermshade4." ctermbg=".s:ctermshade1
+exec "hi SignColumn guibg=".s:guishade0
+exec "hi SignColumn ctermbg=".s:ctermshade0
+exec "hi IncSearch guifg=".s:guishade0." guibg=".s:guiaccent2
+exec "hi IncSearch ctermfg=".s:ctermshade0." ctermbg=".s:ctermaccent2
+exec "hi LineNr guifg=".s:guishade2." guibg=".s:guishade0
+exec "hi LineNr ctermfg=".s:ctermshade2." ctermbg=".s:ctermshade0
+exec "hi CursorLineNr guifg=".s:guishade3." guibg=".s:guishade1
+exec "hi CursorLineNr ctermfg=".s:ctermshade3." ctermbg=".s:ctermshade1
+exec "hi MatchParen guibg=".s:guishade2
+exec "hi MatchParen ctermbg=".s:ctermshade2
+exec "hi MoreMsg guifg=".s:guishade0." guibg=".s:guiaccent4
+exec "hi MoreMsg ctermfg=".s:ctermshade0." ctermbg=".s:ctermaccent4
+exec "hi NonText guifg=".s:guishade2." guibg=".s:guishade0
+exec "hi NonText ctermfg=".s:ctermshade2." ctermbg=".s:ctermshade0
+exec "hi Pmenu guifg=".s:guishade6." guibg=".s:guishade1
+exec "hi Pmenu ctermfg=".s:ctermshade6." ctermbg=".s:ctermshade1
+exec "hi PmenuSel guifg=".s:guiaccent4." guibg=".s:guishade1
+exec "hi PmenuSel ctermfg=".s:ctermaccent4." ctermbg=".s:ctermshade1
+exec "hi PmenuSbar guifg=".s:guiaccent3." guibg=".s:guishade1
+exec "hi PmenuSbar ctermfg=".s:ctermaccent3." ctermbg=".s:ctermshade1
+exec "hi PmenuThumb guifg=".s:guiaccent0." guibg=".s:guishade2
+exec "hi PmenuThumb ctermfg=".s:ctermaccent0." ctermbg=".s:ctermshade2
+exec "hi Question guifg=".s:guishade7." guibg=".s:guishade1
+exec "hi Question ctermfg=".s:ctermshade7." ctermbg=".s:ctermshade1
+exec "hi Search guifg=".s:guishade0." guibg=".s:guiaccent2
+exec "hi Search ctermfg=".s:ctermshade0." ctermbg=".s:ctermaccent2
+exec "hi SpecialKey guifg=".s:guiaccent7." guibg=".s:guishade0
+exec "hi SpecialKey ctermfg=".s:ctermaccent7." ctermbg=".s:ctermshade0
+exec "hi SpellBad guifg=".s:guiaccent0
+exec "hi SpellBad ctermfg=".s:ctermaccent0." ctermbg=NONE cterm=undercurl"
+exec "hi SpellCap guifg=".s:guiaccent2
+exec "hi SpellCap ctermfg=".s:ctermaccent2." ctermbg=NONE cterm=undercurl"
+exec "hi SpellLocal guifg=".s:guiaccent4
+exec "hi SpellLocal ctermfg=".s:ctermaccent4
+exec "hi SpellRare guifg=".s:guiaccent1
+exec "hi SpellRare ctermfg=".s:ctermaccent1
+exec "hi StatusLine guifg=".s:guishade4." guibg=".s:guishade1." gui=none"
+exec "hi StatusLine ctermfg=".s:ctermshade4." ctermbg=".s:ctermshade1." cterm=none"
+exec "hi TabLine guifg=".s:guishade5." guibg=".s:guishade1
+exec "hi TabLine ctermfg=".s:ctermshade5." ctermbg=".s:ctermshade1
+exec "hi TabLineFill guibg=".s:guishade1
+exec "hi TabLineFill ctermbg=".s:ctermshade1
+exec "hi TabLineSel guifg=".s:guishade6." guibg=".s:guishade0
+exec "hi TabLineSel ctermfg=".s:ctermshade6." ctermbg=".s:ctermshade0
+exec "hi Title guifg=".s:guiaccent5
+exec "hi Title ctermfg=".s:ctermaccent5
+exec "hi Visual guibg=".s:guishade1
+exec "hi Visual ctermbg=".s:ctermshade1
+exec "hi VisualNOS guifg=".s:guiaccent0." guibg=".s:guishade1
+exec "hi VisualNOS ctermfg=".s:ctermaccent0." ctermbg=".s:ctermshade1
+exec "hi WarningMsg guifg=".s:guiaccent0
+exec "hi WarningMsg ctermfg=".s:ctermaccent0
+exec "hi WildMenu guifg=".s:guiaccent4." guibg=".s:guishade1
+exec "hi WildMenu ctermfg=".s:ctermaccent4." ctermbg=".s:ctermshade1
+
+" NERDTree
+
+exec "hi NERDTreeExecFile guifg=".s:guiaccent4
+exec "hi NERDTreeExecFile ctermfg=".s:ctermaccent4
+exec "hi NERDTreeDirSlash guifg=".s:guiaccent5
+exec "hi NERDTreeDirSlash ctermfg=".s:ctermaccent5
+exec "hi NERDTreeCWD guifg=".s:guiaccent0
+exec "hi NERDTreeCWD ctermfg=".s:ctermaccent0
+
+""""""""""""
+" Clean up "
+""""""""""""
+
+unlet s:guishade0 s:guishade1 s:guishade2 s:guishade3 s:guishade4 s:guishade5 s:guishade6 s:guishade7 s:guiaccent0 s:guiaccent1 s:guiaccent2 s:guiaccent3 s:guiaccent4 s:guiaccent5 s:guiaccent6 s:guiaccent7
+unlet s:ctermshade0 s:ctermshade1 s:ctermshade2 s:ctermshade3 s:ctermshade4 s:ctermshade5 s:ctermshade6 s:ctermshade7 s:ctermaccent0 s:ctermaccent1 s:ctermaccent2 s:ctermaccent3 s:ctermaccent4 s:ctermaccent5 s:ctermaccent6 s:ctermaccent7
+--]]
