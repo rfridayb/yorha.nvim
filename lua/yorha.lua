@@ -81,6 +81,7 @@ Yorha.palette = {
 	yellow = "#62473B",
 	green = "#727B5B",
 	aqua = "#8BBBAA",
+	blue = "#5F6A79",
 }
 
 local function get_colors()
@@ -109,12 +110,12 @@ local function get_colors()
 		green = p.green,
 		purple = p.green,
 		aqua = p.aqua,
-		blue = p.aqua,
+		blue = p.blue,
 		neutral_yellow = p.yellow,
 		neutral_green = p.green,
 		neutral_purple = p.green,
 		neutral_aqua = p.aqua,
-		neutral_blue = p.aqua,
+		neutral_blue = p.blue,
 		dark_red = p.red,
 		dark_green = p.green,
 		dark_aqua = p.aqua,
